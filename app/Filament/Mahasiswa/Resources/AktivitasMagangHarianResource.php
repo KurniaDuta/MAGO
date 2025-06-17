@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Log;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Filament\Infolists\Infolist;
 use Filament\Infolists\Components;
+use Illuminate\Support\HtmlString;
 
 class AktivitasMagangHarianResource extends Resource
 {
@@ -260,7 +261,7 @@ class AktivitasMagangHarianResource extends Resource
                                 if ($lowongan === null) {
                                     $lowongan = LowonganMagangModel::with(['periode'])->find($idLowongan);
                                 }
-                                return $lowongan ? $lowongan->deskripsi_lowongan ?? 'Tidak ada deskripsi' : 'Tidak ada deskripsi';
+                                return $lowongan ? new HtmlString($lowongan->deskripsi_lowongan) ?? 'Tidak ada deskripsi' : 'Tidak ada deskripsi';
                             })
                             ->columnSpanFull(),
                     ])
