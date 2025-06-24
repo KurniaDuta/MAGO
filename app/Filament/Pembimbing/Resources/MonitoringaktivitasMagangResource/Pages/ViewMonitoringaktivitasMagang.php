@@ -4,64 +4,154 @@ namespace App\Filament\Pembimbing\Resources\MonitoringaktivitasMagangResource\Pa
 
 use App\Filament\Pembimbing\Resources\MonitoringaktivitasMagangResource;
 use Filament\Resources\Pages\ViewRecord;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
+use Filament\Actions;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
-use Illuminate\Contracts\View\View;
+use Filament\Infolists\Infolist;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ImageEntry;
+use Filament\Infolists\Components\Section;
+use Carbon\Carbon;
 
-class ViewMonitoringaktivitasMagang extends ViewRecord implements HasForms
+class ViewMonitoringaktivitasMagang extends ViewRecord
 {
-    use InteractsWithForms;
-
     protected static string $resource = MonitoringaktivitasMagangResource::class;
 
-    public ?array $formData = [];
-
-    public function mount($record): void
+    protected function getHeaderActions(): array
     {
-        parent::mount($record);
+        return [
+            Actions\Action::make('back')
+                ->label('Kembali')
+                ->url(MonitoringaktivitasMagangResource::getUrl('index'))
+                ->color('gray')
+                ->icon('heroicon-o-arrow-left'),
 
-        $this->form->fill([
-            'feedback_progres' => $this->record->feedback_progres,
-        ]);
+            Actions\Action::make('giveFeedback')
+                ->label('Beri Feedback')
+                ->color('primary')
+                ->icon('heroicon-o-chat-bubble-left-ellipsis')
+                ->form([
+                    Textarea::make('feedback_progres')
+                        ->label('Feedback Dosen Pembimbing')
+                        ->placeholder('Tuliskan feedback, arahan, atau koreksi untuk aktivitas yang dilakukan mahasiswa...')
+                        ->rows(6)
+                        ->required()
+                        ->maxLength(500)
+                        ->default(fn($record) => $record->feedback_progres),
+                ])
+                ->modalHeading('Berikan Feedback untuk Aktivitas Magang')
+                ->modalDescription(fn($record) => 'Aktivitas pada tanggal ' . Carbon::parse($record->tanggal_log)->format('d F Y'))
+                ->modalSubmitActionLabel('Simpan Feedback')
+                ->action(function (array $data, $record) {
+                    // Update data
+                    $record->update([
+                        'feedback_progres' => $data['feedback_progres'],
+                    ]);
+
+                    // Kirim notifikasi ke mahasiswa
+                    $mahasiswa = $record->penempatan->mahasiswa->user ?? null;
+                    if ($mahasiswa) {
+                        Notification::make()
+                            ->title('Feedback aktivitas magang diterima')
+                            ->body('Dosen pembimbing telah memberikan feedback untuk aktivitas magang Anda pada tanggal ' .
+                                Carbon::parse($record->tanggal_log)->format('d F Y'))
+                            ->success()
+                            ->persistent()
+                            ->sendToDatabase($mahasiswa);
+                    }
+
+                    Notification::make()
+                        ->title('Feedback berhasil disimpan')
+                        ->success()
+                        ->send();
+                }),
+        ];
     }
 
-    public function getFormStatePath(): string
+    public function infolist(Infolist $infolist): Infolist
     {
-        return 'formData';
-    }
+        return $infolist
+            ->schema([
+                Section::make('Informasi Mahasiswa')
+                    ->schema([
+                        TextEntry::make('penempatan.mahasiswa.user.nama')
+                            ->label('Nama Mahasiswa'),
 
-    public function form(Form $form): Form
-    {
-        return $form->schema([
-            Textarea::make('feedback_progres')
-                ->label('Feedback Dosen Pembimbing')
-                ->placeholder('Tuliskan feedback Anda di sini...')
-                ->rows(6)
-                ->required()
-                ->maxLength(500),
-        ]);
-    }
+                        TextEntry::make('penempatan.mahasiswa.nim')
+                            ->label('NIM'),
 
-    public function save(): void
-    {
-        $this->record->update([
-            'feedback_progres' => $this->formData['feedback_progres'] ?? null,
-        ]);
+                        TextEntry::make('penempatan.mahasiswa.prodi.nama_prodi')
+                            ->label('Program Studi')
+                            ->visible(fn($record) => $record->penempatan->mahasiswa->prodi ?? false),
 
-        Notification::make()
-            ->title('Feedback berhasil disimpan')
-            ->success()
-            ->send();
-    }
+                        TextEntry::make('penempatan.mahasiswa.semester')
+                            ->label('Semester')
+                            ->visible(fn($record) => $record->penempatan->mahasiswa->semester ?? false),
 
-    public function getFooter(): ?View
-    {
-        return view('filament.pembimbing.resources.monitoringaktivitas-magang-resource.pages.view-tabs', [
-            'record' => $this->record,
-            'form' => $this->form,
-        ]);
+                        TextEntry::make('tanggal_log')
+                            ->label('Tanggal Aktivitas')
+                            ->date('d F Y'),
+
+                        TextEntry::make('status')
+                            ->label('Status Kehadiran')
+                            ->badge()
+                            ->formatStateUsing(fn(string $state): string => ucfirst($state))
+                            ->color(fn(string $state): string => match ($state) {
+                                'masuk' => 'success',
+                                'izin' => 'warning',
+                                'sakit' => 'danger',
+                                'cuti' => 'info',
+                                default => 'gray',
+                            }),
+                    ])->columns(3),
+
+                Section::make('Informasi Perusahaan')
+                    ->schema([
+                        TextEntry::make('penempatan.pengajuan.lowongan.perusahaan.nama')
+                            ->label('Perusahaan'),
+
+                        TextEntry::make('penempatan.pengajuan.lowongan.judul_lowongan')
+                            ->label('Posisi Magang'),
+
+                        TextEntry::make('penempatan.pengajuan.lowongan.jenisMagang.nama_jenis_magang')
+                            ->label('Jenis Magang'),
+
+                        TextEntry::make('penempatan.pengajuan.lowongan.periode.nama_periode')
+                            ->label('Periode Magang'),
+                    ])->columns(2),
+
+                Section::make('Detail Aktivitas')
+                    ->schema([
+                        ImageEntry::make('file_bukti')
+                            ->getStateUsing(function ($record) {
+                                return $record->file_bukti
+                                    ? 'https://res.cloudinary.com/dxwwjhtup/image/upload/' . ltrim($record->file_bukti, '/')
+                                    : null;
+                            })
+                            ->height(400)
+                            ->extraImgAttributes(['class' => 'rounded-lg object-contain shadow-sm']),
+
+                        TextEntry::make('keterangan')
+                            ->label('Keterangan Aktivitas')
+                            ->prose()
+                            ->markdown()
+                            ->columnSpanFull(),
+                    ]),
+
+                // Section::make('Bukti Aktivitas')
+                //     ->schema([])
+                //     ->visible(fn($record) => !empty($record->file_bukti)),
+
+                Section::make('Feedback Dosen')
+                    ->schema([
+                        TextEntry::make('feedback_progres')
+                            ->label('Feedback')
+                            ->prose()
+                            ->markdown()
+                            ->placeholder('Belum ada feedback')
+                            ->columnSpanFull(),
+                    ])
+                    ->collapsible(false),
+            ]);
     }
 }
