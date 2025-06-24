@@ -62,7 +62,7 @@ class MahasiswaPanelProvider extends PanelProvider
             // ->discoverWidgets(in: app_path('Filament/Mahasiswa/Widgets'), for: 'App\\Filament\\Mahasiswa\\Widgets')
             ->widgets([
                 Widgets\AccountWidget::class,
-                Widgets\FilamentInfoWidget::class,
+                // Widgets\FilamentInfoWidget::class,
                 \App\Filament\Mahasiswa\Widgets\MahasiswaStatusPengajuanTable::class,
                 \App\Filament\Mahasiswa\Widgets\RekomendasiMagang::class,
                 \App\Filament\Mahasiswa\Widgets\PreferensiWarning::class,

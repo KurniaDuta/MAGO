@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Log;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Filament\Infolists\Infolist;
 use Filament\Infolists\Components;
+use Filament\Notifications\Notification;
 
 class AktivitasMagangHarianResource extends Resource
 {
@@ -46,12 +47,12 @@ class AktivitasMagangHarianResource extends Resource
     {
         return auth()->user()?->mahasiswa?->preferensi()->exists() ?? false;
     }
-    
+
     public static function form(Form $form): Form
     {
         $lowonganOptions = [];
         $userId = Auth::id();
-        
+
         // Mendapatkan semua lowongan yang terkait dengan penempatan berlangsung
         $lowongans = LowonganMagangModel::whereHas('pengajuanMagang', function (Builder $query) use ($userId) {
             $query->whereHas('mahasiswa', function (Builder $query) use ($userId) {
@@ -59,11 +60,11 @@ class AktivitasMagangHarianResource extends Resource
                     $query->where('id_user', $userId);
                 });
             })->where('status', 'Diterima')
-            ->whereHas('penempatan', function (Builder $query) {
-                $query->where('status', PenempatanMagangModel::STATUS_BERLANGSUNG);
-            });
+                ->whereHas('penempatan', function (Builder $query) {
+                    $query->where('status', PenempatanMagangModel::STATUS_BERLANGSUNG);
+                });
         })->with(['periode', 'waktuMagang'])->get();
-        
+
         foreach ($lowongans as $lowongan) {
             // Menghitung tanggal berakhir magang berdasarkan periode dan durasi
             if ($lowongan->periode && $lowongan->waktuMagang) {
@@ -74,7 +75,7 @@ class AktivitasMagangHarianResource extends Resource
                     $tahunAwal = (int)$matches[1];
                     $tahunAkhir = (int)$matches[2];
                     $jenisSemester = $matches[3];
-                    
+
                     // Determine start date based on semester type
                     if ($jenisSemester == 'Ganjil') {
                         $startDate = Carbon::create($tahunAwal, 7, 1);
@@ -83,13 +84,13 @@ class AktivitasMagangHarianResource extends Resource
                     } else {
                         $startDate = Carbon::create($tahunAwal, 6, 1);
                     }
-                    
+
                     // Extract duration and calculate end date
                     preg_match('/(\d+)/', $lowongan->waktuMagang->waktu_magang, $matches);
                     if (isset($matches[1])) {
                         $bulan = (int)$matches[1];
                         $endDate = $startDate->copy()->addMonths($bulan);
-                        
+
                         // Hanya tambahkan lowongan yang belum berakhir
                         if (Carbon::now()->lte($endDate)) {
                             $lowonganOptions[$lowongan->id_lowongan] = $lowongan->judul_lowongan;
@@ -120,21 +121,21 @@ class AktivitasMagangHarianResource extends Resource
                                 })
                                 ->where('status', 'Diterima')
                                 ->first();
-                            
+
                             if ($pengajuan) {
                                 $penempatan = PenempatanMagangModel::where('id_pengajuan', $pengajuan->id_pengajuan)
                                     ->where('status', PenempatanMagangModel::STATUS_BERLANGSUNG)
                                     ->first();
-                                    
+
                                 if ($penempatan) {
                                     $set('id_penempatan', $penempatan->id_penempatan);
                                 }
                             }
                         }
                     }),
-                    
+
                 Forms\Components\Hidden::make('id_penempatan'),
-                    
+
                 // Section InfoList Detail Lowongan
                 Forms\Components\Section::make('Detail Lowongan')
                     ->description('Informasi tentang lowongan magang yang dipilih')
@@ -148,15 +149,15 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 $lowongan = LowonganMagangModel::with('perusahaan')->find($idLowongan);
-                                                return $lowongan && $lowongan->perusahaan 
+                                                return $lowongan && $lowongan->perusahaan
                                                     ? $lowongan->perusahaan->nama ?? 'N/A'
                                                     : 'N/A';
                                             })
                                             ->hintIcon('heroicon-o-building-office'),
                                     ]),
-                                
+
                                 Forms\Components\Group::make()
                                     ->schema([
                                         Forms\Components\Placeholder::make('placeholder_bidang')
@@ -164,22 +165,22 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 $lowongan = LowonganMagangModel::with('bidangKeahlian')->find($idLowongan);
-                                                
+
                                                 if (!$lowongan || $lowongan->bidangKeahlian->isEmpty()) {
                                                     return 'N/A';
                                                 }
-                                                
+
                                                 // Mengumpulkan semua nama bidang keahlian
                                                 $bidangNames = $lowongan->bidangKeahlian->pluck('nama_bidang_keahlian')->toArray();
-                                                
+
                                                 // Menggabungkan dengan koma
                                                 return implode(', ', $bidangNames);
                                             })
                                             ->hintIcon('heroicon-o-briefcase'),
                                     ]),
-                                    
+
                                 Forms\Components\Group::make()
                                     ->schema([
                                         Forms\Components\Placeholder::make('placeholder_durasi')
@@ -187,15 +188,15 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 $lowongan = LowonganMagangModel::with('waktuMagang')->find($idLowongan);
-                                                return $lowongan && $lowongan->waktuMagang 
+                                                return $lowongan && $lowongan->waktuMagang
                                                     ? $lowongan->waktuMagang->waktu_magang ?? 'N/A'
                                                     : 'N/A';
                                             })
                                             ->hintIcon('heroicon-o-clock'),
                                     ]),
-                                    
+
                                 Forms\Components\Group::make()
                                     ->schema([
                                         Forms\Components\Placeholder::make('placeholder_lokasi_kantor')
@@ -203,9 +204,9 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 $lowongan = LowonganMagangModel::with('perusahaan')->find($idLowongan);
-                                                return $lowongan && $lowongan->perusahaan 
+                                                return $lowongan && $lowongan->perusahaan
                                                     ? $lowongan->perusahaan->alamat ?? 'N/A'
                                                     : 'N/A';
                                             })
@@ -219,18 +220,18 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 $lowongan = LowonganMagangModel::with(['daerahMagang.provinsi'])->find($idLowongan);
-                                                
+
                                                 if (!$lowongan || !$lowongan->daerahMagang) {
                                                     return 'N/A';
                                                 }
-                                                
+
                                                 // menggunakan accessor yang ada pada model
                                                 if (method_exists($lowongan->daerahMagang, 'namaLengkapDenganProvinsi')) {
                                                     return $lowongan->daerahMagang->namaLengkapDenganProvinsi;
                                                 }
-                                                
+
                                                 // fallback jika accessor tidak tersedia
                                                 $daerah = $lowongan->daerahMagang;
                                                 $provinsi = $daerah->provinsi ? $daerah->provinsi->nama_provinsi : 'N/A';
@@ -246,7 +247,7 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 $lowongan = LowonganMagangModel::with(['periode'])->find($idLowongan);
 
                                                 if (!$lowongan || !$lowongan->periode) {
@@ -259,13 +260,13 @@ class AktivitasMagangHarianResource extends Resource
                                     ]),
                             ])
                             ->columns(2),
-                            
+
                         Forms\Components\Placeholder::make('placeholder_deskripsi')
                             ->label('Deskripsi Lowongan')
                             ->content(function (Get $get) {
                                 $idLowongan = $get('id_lowongan');
                                 if (!$idLowongan) return 'Tidak ada deskripsi';
-                                
+
                                 static $lowongan = null;
                                 if ($lowongan === null) {
                                     $lowongan = LowonganMagangModel::with(['periode'])->find($idLowongan);
@@ -276,7 +277,7 @@ class AktivitasMagangHarianResource extends Resource
                     ])
                     ->collapsible()
                     ->collapsed(false)
-                    ->visible(fn (Get $get): bool => (bool) $get('id_lowongan'))
+                    ->visible(fn(Get $get): bool => (bool) $get('id_lowongan'))
                     ->extraAttributes([
                         'class' => 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg',
                     ]),
@@ -293,24 +294,24 @@ class AktivitasMagangHarianResource extends Resource
                                     ->content(function (Get $get) {
                                         $idLowongan = $get('id_lowongan');
                                         if (!$idLowongan) return 'N/A';
-                                        
+
                                         // Get the lowongan with its related periode and waktu_magang
                                         $lowongan = LowonganMagangModel::with(['periode', 'waktuMagang'])->find($idLowongan);
                                         if (!$lowongan || !$lowongan->periode || !$lowongan->waktuMagang) {
                                             return 'N/A';
                                         }
-                                        
+
                                         // Extract year and semester type from the period name (e.g., "2024/2025 Ganjil")
                                         $periodeNama = $lowongan->periode->nama_periode;
                                         $pattern = '/(\d{4})\/(\d{4})\s+(Ganjil|Genap|Antara)/';
                                         if (!preg_match($pattern, $periodeNama, $matches)) {
                                             return 'N/A';
                                         }
-                                        
+
                                         $tahunAwal = (int)$matches[1];
                                         $tahunAkhir = (int)$matches[2];
                                         $jenisSemester = $matches[3];
-                                        
+
                                         // Determine start date based on semester type
                                         if ($jenisSemester == 'Ganjil') {
                                             // Odd semester starts in July of the first year
@@ -322,23 +323,23 @@ class AktivitasMagangHarianResource extends Resource
                                             // Antara (short semester) could be in between, using June as default
                                             $startDate = Carbon::create($tahunAwal, 6, 1);
                                         }
-                                        
+
                                         // Extract duration from waktu_magang (e.g., "6 Bulan")
                                         preg_match('/(\d+)/', $lowongan->waktuMagang->waktu_magang, $matches);
                                         if (!isset($matches[1])) {
                                             return 'N/A';
                                         }
-                                        
+
                                         $bulan = (int)$matches[1];
                                         $endDate = $startDate->copy()->addMonths($bulan);
-                                        
+
                                         $startFormatted = $startDate->format('d M Y');
                                         $endFormatted = $endDate->format('d M Y');
-                                        
+
                                         return "Mulai: {$startFormatted} - Selesai: {$endFormatted}";
                                     })
                                     ->hintIcon('heroicon-o-calendar-date-range'),
-                                
+
                                 // Status Durasi (Group Baru)
                                 Forms\Components\Group::make()
                                     ->schema([
@@ -347,24 +348,24 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 // Get the lowongan with its related periode and waktu_magang
                                                 $lowongan = LowonganMagangModel::with(['periode', 'waktuMagang'])->find($idLowongan);
                                                 if (!$lowongan || !$lowongan->periode || !$lowongan->waktuMagang) {
                                                     return 'N/A';
                                                 }
-                                                
+
                                                 // Extract year and semester type from period
                                                 $periodeNama = $lowongan->periode->nama_periode;
                                                 $pattern = '/(\d{4})\/(\d{4})\s+(Ganjil|Genap|Antara)/';
                                                 if (!preg_match($pattern, $periodeNama, $matches)) {
                                                     return 'N/A';
                                                 }
-                                                
+
                                                 $tahunAwal = (int)$matches[1];
                                                 $tahunAkhir = (int)$matches[2];
                                                 $jenisSemester = $matches[3];
-                                                
+
                                                 // Determine start date based on semester type
                                                 if ($jenisSemester == 'Ganjil') {
                                                     $startDate = Carbon::create($tahunAwal, 7, 1);
@@ -373,30 +374,30 @@ class AktivitasMagangHarianResource extends Resource
                                                 } else {
                                                     $startDate = Carbon::create($tahunAwal, 6, 1);
                                                 }
-                                                
+
                                                 // Extract duration and calculate end date
                                                 preg_match('/(\d+)/', $lowongan->waktuMagang->waktu_magang, $matches);
                                                 if (!isset($matches[1])) {
                                                     return 'N/A';
                                                 }
-                                                
+
                                                 $bulan = (int)$matches[1];
                                                 $endDate = $startDate->copy()->addMonths($bulan);
-                                                
+
                                                 // Compare with current date
                                                 $now = Carbon::now();
-                                                
+
                                                 // Jika magang sudah berakhir
                                                 if ($now > $endDate) {
                                                     return 'Magang telah berakhir';
                                                 }
-                                                
+
                                                 // Jika belum dimulai
                                                 if ($now < $startDate) {
                                                     // Hitung waktu tunggu hingga mulai magang
                                                     $diffInMonths = $now->diffInMonths($startDate);
                                                     $diffInDays = $now->copy()->addMonths($diffInMonths)->diffInDays($startDate);
-                                                    
+
                                                     if ($diffInMonths > 0 && $diffInDays > 0) {
                                                         return "Magang dimulai dalam $diffInMonths bulan $diffInDays hari lagi";
                                                     } elseif ($diffInMonths > 0) {
@@ -409,11 +410,11 @@ class AktivitasMagangHarianResource extends Resource
                                                         return "Magang dimulai hari ini! Semoga sukses";
                                                     }
                                                 }
-                                                
+
                                                 // Jika magang sedang berlangsung
                                                 $diffInMonths = $now->diffInMonths($endDate);
                                                 $diffInDays = $now->copy()->addMonths($diffInMonths)->diffInDays($endDate);
-                                                
+
                                                 if ($diffInMonths > 0 && $diffInDays > 0) {
                                                     return "Sisa waktu magang: $diffInMonths bulan $diffInDays hari lagi";
                                                 } elseif ($diffInMonths > 0) {
@@ -431,7 +432,7 @@ class AktivitasMagangHarianResource extends Resource
                             ])
                             ->columns(2),
                     ])
-                    ->visible(fn (Get $get): bool => (bool) $get('id_lowongan'))
+                    ->visible(fn(Get $get): bool => (bool) $get('id_lowongan'))
                     ->extraAttributes([
                         'class' => 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg',
                     ]),
@@ -448,7 +449,7 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 // Dapatkan pengajuan dan penempatan terkait
                                                 $pengajuan = PengajuanMagangModel::where('id_lowongan', $idLowongan)
                                                     ->whereHas('mahasiswa', function (Builder $query) {
@@ -458,20 +459,20 @@ class AktivitasMagangHarianResource extends Resource
                                                     })
                                                     ->where('status', 'Diterima')
                                                     ->first();
-                                                
+
                                                 if (!$pengajuan) return 'N/A';
-                                                
+
                                                 $penempatan = PenempatanMagangModel::where('id_pengajuan', $pengajuan->id_pengajuan)->first();
-                                                
+
                                                 if (!$penempatan || !$penempatan->dosenPembimbing()->exists()) {
                                                     return 'Belum ditentukan';
                                                 }
-                                                
+
                                                 return $penempatan->dosenPembimbing()->first()->user->nama ?? 'N/A';
                                             })
                                             ->hintIcon('heroicon-o-user'),
                                     ]),
-                                    
+
                                 Forms\Components\Group::make()
                                     ->schema([
                                         Forms\Components\Placeholder::make('nip_dosen')
@@ -479,7 +480,7 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 // Dapatkan pengajuan dan penempatan terkait
                                                 $pengajuan = PengajuanMagangModel::where('id_lowongan', $idLowongan)
                                                     ->whereHas('mahasiswa', function (Builder $query) {
@@ -489,20 +490,20 @@ class AktivitasMagangHarianResource extends Resource
                                                     })
                                                     ->where('status', 'Diterima')
                                                     ->first();
-                                                
+
                                                 if (!$pengajuan) return 'N/A';
-                                                
+
                                                 $penempatan = PenempatanMagangModel::where('id_pengajuan', $pengajuan->id_pengajuan)->first();
-                                                
+
                                                 if (!$penempatan || !$penempatan->dosenPembimbing()->exists()) {
                                                     return 'Belum ditentukan';
                                                 }
-                                                
+
                                                 return $penempatan->dosenPembimbing()->first()->nip ?? 'N/A';
                                             })
                                             ->hintIcon('heroicon-o-identification'),
                                     ]),
-                                    
+
                                 Forms\Components\Group::make()
                                     ->schema([
                                         Forms\Components\Placeholder::make('telepon_dosen')
@@ -510,7 +511,7 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 // Dapatkan pengajuan dan penempatan terkait
                                                 $pengajuan = PengajuanMagangModel::where('id_lowongan', $idLowongan)
                                                     ->whereHas('mahasiswa', function (Builder $query) {
@@ -520,20 +521,20 @@ class AktivitasMagangHarianResource extends Resource
                                                     })
                                                     ->where('status', 'Diterima')
                                                     ->first();
-                                                
+
                                                 if (!$pengajuan) return 'N/A';
-                                                
+
                                                 $penempatan = PenempatanMagangModel::where('id_pengajuan', $pengajuan->id_pengajuan)->first();
-                                                
+
                                                 if (!$penempatan || !$penempatan->dosenPembimbing()->exists()) {
                                                     return 'Belum ditentukan';
                                                 }
-                                                
+
                                                 return $penempatan->dosenPembimbing()->first()->user->no_telepon ?? 'N/A';
                                             })
                                             ->hintIcon('heroicon-o-phone'),
                                     ]),
-                                
+
                                 Forms\Components\Group::make()
                                     ->schema([
                                         Forms\Components\Placeholder::make('bidang_keahlian_dosen')
@@ -541,7 +542,7 @@ class AktivitasMagangHarianResource extends Resource
                                             ->content(function (Get $get) {
                                                 $idLowongan = $get('id_lowongan');
                                                 if (!$idLowongan) return 'N/A';
-                                                
+
                                                 // Dapatkan pengajuan dan penempatan terkait
                                                 $pengajuan = PengajuanMagangModel::where('id_lowongan', $idLowongan)
                                                     ->whereHas('mahasiswa', function (Builder $query) {
@@ -551,22 +552,22 @@ class AktivitasMagangHarianResource extends Resource
                                                     })
                                                     ->where('status', 'Diterima')
                                                     ->first();
-                                                
+
                                                 if (!$pengajuan) return 'N/A';
-                                                
+
                                                 $penempatan = PenempatanMagangModel::where('id_pengajuan', $pengajuan->id_pengajuan)->first();
-                                                
+
                                                 if (!$penempatan || !$penempatan->dosenPembimbing()->exists()) {
                                                     return 'Belum ditentukan';
                                                 }
-                                                
+
                                                 $dosen = $penempatan->dosenPembimbing()->first();
                                                 $bidangKeahlian = $dosen->bidangKeahlian;
-                                                
+
                                                 if ($bidangKeahlian->isEmpty()) {
                                                     return 'Tidak ada bidang keahlian terdaftar';
                                                 }
-                                                
+
                                                 return $bidangKeahlian->pluck('nama_bidang_keahlian')->implode(', ');
                                             })
                                             ->hintIcon('heroicon-o-academic-cap'),
@@ -576,11 +577,11 @@ class AktivitasMagangHarianResource extends Resource
                     ])
                     ->collapsible()
                     ->collapsed(true)
-                    ->visible(fn (Get $get): bool => (bool) $get('id_lowongan'))
+                    ->visible(fn(Get $get): bool => (bool) $get('id_lowongan'))
                     ->extraAttributes([
                         'class' => 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg',
                     ]),
-                    
+
                 Forms\Components\DatePicker::make('tanggal_log')
                     ->native(false)
                     ->label('Tanggal Log Aktivitas')
@@ -592,7 +593,7 @@ class AktivitasMagangHarianResource extends Resource
                     ->format('Y-m-d') // format nilai yang disimpan
                     ->locale('id') // locale bahasa Indonesia
                     ->readOnly(),
-                
+
                 Forms\Components\Select::make('status')
                     ->label('Status')
                     ->required()
@@ -602,7 +603,7 @@ class AktivitasMagangHarianResource extends Resource
                         'sakit' => 'Sakit',
                         'cuti' => 'Cuti',
                     ]),
-                
+
                 Forms\Components\Textarea::make('keterangan')
                     ->label('Keterangan')
                     ->rows(7)
@@ -610,7 +611,7 @@ class AktivitasMagangHarianResource extends Resource
                     ->helperText('Keterangan ini akan terlihat oleh pembimbing magang Anda.')
                     ->maxLength(300)
                     ->required(),
-                
+
                 Forms\Components\FileUpload::make('file_bukti')
                     ->label('File Bukti')
                     ->disk('cloudinary')
@@ -627,8 +628,8 @@ class AktivitasMagangHarianResource extends Resource
                     ->uploadProgressIndicatorPosition('left')
                     ->maxSize(5 * 1024) // 10MB
                     ->getUploadedFileNameForStorageUsing(
-                        fn (TemporaryUploadedFile $file): string => 
-                            'bukti-' . time() . '-' . uniqid() . '.' . $file->getClientOriginalExtension()
+                        fn(TemporaryUploadedFile $file): string =>
+                        'bukti-' . time() . '-' . uniqid() . '.' . $file->getClientOriginalExtension()
                     )
                     ->helperText('Unggah bukti aktivitas (JPG, PNG max 5MB)'),
             ]);
@@ -660,7 +661,7 @@ class AktivitasMagangHarianResource extends Resource
                 'xl' => 3,
             ])
             ->defaultPaginationPageOption(12)
-            ->defaultSort('created_at', 'desc') 
+            ->defaultSort('created_at', 'desc')
             ->columns([
                 // Tables\Columns\ImageColumn::make('file_bukti')
                 //     ->disk('cloudinary')
@@ -671,13 +672,13 @@ class AktivitasMagangHarianResource extends Resource
                     ->label('Bukti')
                     ->view('filament.components.bukti-indicator')
                     ->alignCenter(),
-                
+
                 Tables\Columns\Layout\Stack::make([
                     Tables\Columns\TextColumn::make('tanggal_log')
                         ->date('d F Y')
                         ->weight('bold')
                         ->size('lg'),
-                    
+
                     Tables\Columns\TextColumn::make('status')
                         ->badge()
                         ->colors([
@@ -686,7 +687,7 @@ class AktivitasMagangHarianResource extends Resource
                             'danger' => 'sakit',
                             'info' => 'cuti',
                         ])
-                        ->icon(fn ($record) => match($record->status) {
+                        ->icon(fn($record) => match ($record->status) {
                             'masuk' => 'heroicon-o-check-circle',
                             'izin' => 'heroicon-o-exclamation',
                             'sakit' => 'heroicon-o-x-circle',
@@ -698,7 +699,7 @@ class AktivitasMagangHarianResource extends Resource
                         ->label('Deskripsi')
                         ->icon('heroicon-o-document-text')
                         ->limit(30)
-                        ->tooltip(fn ($state, $record) => strlen($state) > 60 ? $state : null),
+                        ->tooltip(fn($state, $record) => strlen($state) > 60 ? $state : null),
 
                     Tables\Columns\TextColumn::make('feedback_progres')
                         ->label('Feedback')
@@ -706,7 +707,7 @@ class AktivitasMagangHarianResource extends Resource
                         ->color('gray')
                         ->placeholder('Belum ada feedback')
                         ->limit(40)
-                        ->tooltip(fn ($state) => strlen($state) > 40 ? $state : null)
+                        ->tooltip(fn($state) => strlen($state) > 40 ? $state : null)
 
 
                 ])
@@ -726,21 +727,21 @@ class AktivitasMagangHarianResource extends Resource
                                             ->searchable()
                                             ->required()
                                             ->live()
-                                            ->afterStateUpdated(function($state, callable $set, callable $get) {
+                                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
                                                 if ($state) {
                                                     // Mendapatkan data lowongan dengan periode dan waktu magang
                                                     $lowongan = LowonganMagangModel::with(['periode', 'waktuMagang'])->find($state);
-                                                    
+
                                                     if ($lowongan && $lowongan->periode && $lowongan->waktuMagang) {
                                                         // Extract year and semester type from period name
                                                         $periodeNama = $lowongan->periode->nama_periode;
                                                         $pattern = '/(\d{4})\/(\d{4})\s+(Ganjil|Genap|Antara)/';
-                                                        
+
                                                         if (preg_match($pattern, $periodeNama, $matches)) {
                                                             $tahunAwal = (int)$matches[1];
                                                             $tahunAkhir = (int)$matches[2];
                                                             $jenisSemester = $matches[3];
-                                                            
+
                                                             // Determine start date based on semester type
                                                             if ($jenisSemester == 'Ganjil') {
                                                                 // Odd semester starts in July of the first year
@@ -752,17 +753,17 @@ class AktivitasMagangHarianResource extends Resource
                                                                 // Antara (short semester) could be in between, using June as default
                                                                 $startDate = Carbon::create($tahunAwal, 6, 1);
                                                             }
-                                                            
+
                                                             // Set dari_tanggal berdasarkan periode
                                                             $set('dari_tanggal', $startDate->format('Y-m-d'));
-                                                            
+
                                                             // Extract duration from waktu_magang (e.g., "6 Bulan")
                                                             preg_match('/(\d+)/', $lowongan->waktuMagang->waktu_magang, $matches);
-                                                            
+
                                                             if (isset($matches[1])) {
                                                                 $bulan = (int)$matches[1];
                                                                 $endDate = $startDate->copy()->addMonths($bulan);
-                                                                
+
                                                                 // Set sampai_tanggal berdasarkan dari_tanggal + durasi
                                                                 $set('sampai_tanggal', $endDate->format('Y-m-d'));
                                                             }
@@ -795,7 +796,7 @@ class AktivitasMagangHarianResource extends Resource
                                             ->displayFormat('D, d M Y') // Format Flatpickr
                                             ->format('Y-m-d') // format nilai yang disimpan - penting untuk konsistensi
                                             ->locale('id')
-                                            ->disabled(fn (Get $get): bool => $get('id_lowongan') === null)
+                                            ->disabled(fn(Get $get): bool => $get('id_lowongan') === null)
                                             ->dehydrated(true) // Pastikan nilai selalu dikirim
                                             ->afterStateHydrated(function ($state, Forms\Components\DatePicker $component) {
                                                 // Normalisasi format tanggal saat loading
@@ -803,7 +804,7 @@ class AktivitasMagangHarianResource extends Resource
                                                     $component->state(Carbon::parse($state)->format('Y-m-d'));
                                                 }
                                             }),
-                                            
+
                                         Forms\Components\DatePicker::make('sampai_tanggal')
                                             ->native(false)
                                             ->label('Sampai Tanggal')
@@ -811,7 +812,7 @@ class AktivitasMagangHarianResource extends Resource
                                             ->displayFormat('D, d M Y')
                                             ->format('Y-m-d') // format nilai yang disimpan - penting untuk konsistensi
                                             ->locale('id')
-                                            ->disabled(fn (Get $get): bool => $get('id_lowongan') === null)
+                                            ->disabled(fn(Get $get): bool => $get('id_lowongan') === null)
                                             ->dehydrated(true) // Pastikan nilai selalu dikirim
                                             ->afterStateHydrated(function ($state, Forms\Components\DatePicker $component) {
                                                 // Normalisasi format tanggal saat loading
@@ -824,7 +825,7 @@ class AktivitasMagangHarianResource extends Resource
                     ])
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
-                        
+
                         if (isset($data['id_lowongan'])) {
                             $lowongan = LowonganMagangModel::find($data['id_lowongan']);
                             if ($lowongan) {
@@ -832,7 +833,7 @@ class AktivitasMagangHarianResource extends Resource
                                     ->removable(false);
                             }
                         }
-                        
+
                         if (isset($data['status'])) {
                             $statusLabels = [
                                 'masuk' => 'Masuk',
@@ -840,24 +841,24 @@ class AktivitasMagangHarianResource extends Resource
                                 'sakit' => 'Sakit',
                                 'cuti' => 'Cuti',
                             ];
-                            
+
                             $indicators[] = Indicator::make('Status: ' . $statusLabels[$data['status']])
                                 ->removable(true)
                                 ->removeField('status');
                         }
-                        
+
                         if (isset($data['dari_tanggal'])) {
                             $indicators[] = Indicator::make('Dari: ' . Carbon::parse($data['dari_tanggal'])->format('d F Y'))
                                 ->removable(true)
                                 ->removeField('dari_tanggal');
                         }
-                        
+
                         if (isset($data['sampai_tanggal'])) {
                             $indicators[] = Indicator::make('Sampai: ' . Carbon::parse($data['sampai_tanggal'])->format('d F Y'))
                                 ->removable(true)
                                 ->removeField('sampai_tanggal');
                         }
-                        
+
                         return $indicators;
                     })
                     ->query(function (Builder $query, array $data): Builder {
@@ -865,24 +866,24 @@ class AktivitasMagangHarianResource extends Resource
                             // Jika lowongan belum dipilih, tampilkan data kosong
                             return $query->whereRaw('1 = 0');
                         }
-                        
+
                         // Cari penempatan yang terkait dengan lowongan yang dipilih
                         $idLowongan = $data['id_lowongan'];
                         $pengajuan = PengajuanMagangModel::where('id_lowongan', $idLowongan)
                             ->pluck('id_pengajuan')
                             ->toArray();
-                        
+
                         $penempatan = PenempatanMagangModel::whereIn('id_pengajuan', $pengajuan)
                             ->pluck('id_penempatan')
                             ->toArray();
-                        
+
                         // Filter berdasarkan penempatan, status, dan tanggal
                         $query = $query->whereIn('id_penempatan', $penempatan);
-                        
+
                         if (isset($data['status'])) {
                             $query->where('status', $data['status']);
                         }
-                        
+
                         // PERBAIKAN FILTER TANGGAL
                         if (isset($data['dari_tanggal']) && !empty($data['dari_tanggal'])) {
                             // Normalisasi format tanggal - ekstrak tanggal saja dari datetime
@@ -897,7 +898,7 @@ class AktivitasMagangHarianResource extends Resource
                                 ]);
                             }
                         }
-                        
+
                         if (isset($data['sampai_tanggal']) && !empty($data['sampai_tanggal'])) {
                             // Normalisasi format tanggal - ekstrak tanggal saja dari datetime
                             try {
@@ -911,54 +912,98 @@ class AktivitasMagangHarianResource extends Resource
                                 ]);
                             }
                         }
-                        
+
                         return $query;
                     })
                     ->default([
                         'id_lowongan' => null
                     ]),
-            ], layout: FiltersLayout::AboveContent) 
+            ], layout: FiltersLayout::AboveContent)
             ->filtersFormWidth('3xl') // penting untuk style filter
             ->filtersFormColumns(1) // penting untuk style filter 
             ->actions([
                 Tables\Actions\ViewAction::make()
                     ->label('Lihat Detail'),
                 Tables\Actions\DeleteAction::make()
-                    ->label('Hapus Aktivitas'),
+                    ->label('Hapus Aktivitas')
+                    ->before(function ($record, $action) {
+                        if (!empty($record->feedback_progres)) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Gagal Menghapus')
+                                ->body('Aktivitas ini tidak dapat dihapus karena sudah memiliki feedback dari pembimbing.')
+                                ->send();
+                            $action->halt();
+                            return false;
+                        }
+                    }),
             ], Tables\Enums\ActionsPosition::AfterContent)
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->modalHeading('Hapus Aktivitas Magang')
+                        ->modalDescription('Apakah Anda yakin ingin menghapus aktivitas magang ini? Aktivitas dengan feedback tidak akan dihapus.')
+                        ->modalSubmitActionLabel('Ya, Hapus')
+                        ->modalCancelActionLabel('Batal')
+                        ->deselectRecordsAfterCompletion()
+                        ->before(function ($records, $action) {
+                            $cannotDeleteRecords = [];
+
+                            foreach ($records as $key => $record) {
+                                if (!empty($record->feedback_progres)) {
+                                    $cannotDeleteRecords[] = $record->tanggal_log;
+                                    $records->forget($records->search($record));
+                                }
+                            }
+
+                            if (count($cannotDeleteRecords) > 0) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Perhatian')
+                                    ->body('Beberapa aktivitas magang dengan feedback tidak dapat dihapus: ' . implode(', ', $cannotDeleteRecords))
+                                    ->send();
+                            }
+
+                            if ($records->isEmpty()) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Gagal')
+                                    ->body('Semua aktivitas yang dipilih memiliki feedback dan tidak dapat dihapus.')
+                                    ->send();
+                                $action->halt();
+                                return false;
+                            }
+                        }),
                 ]),
             ])->recordUrl(null)
             ->emptyStateIcon('heroicon-o-clipboard-document-check')
             ->emptyStateHeading('Belum Ada Aktivitas Magang yang Ditampilkan')
             ->emptyStateDescription('Pilih lowongan magang menggunakan filter di atas untuk melihat aktivitas, atau buat aktivitas baru dengan menekan tombol di pojok kanan atas.');
-            // ->emptyStateIcon(function () {
-            //     $request = request();
-            //     $filterApplied = $request->filled('tableFilters.filter_lowongan_magang.id_lowongan');
-                
-            //     return $filterApplied 
-            //         ? 'heroicon-o-document' 
-            //         : 'heroicon-o-funnel';
-            // })
-            // ->emptyStateHeading(function () {
-            //     $request = request();
-            //     $filterApplied = $request->filled('tableFilters.filter_lowongan_magang.id_lowongan');
-                
-            //     return $filterApplied 
-            //         ? 'Belum ada aktivitas magang' 
-            //         : 'Pilih Filter Lowongan Magang';
-            // })
-            // ->emptyStateDescription(function () {
-            //     $request = request();
-            //     $filterApplied = $request->filled('tableFilters.filter_lowongan_magang.id_lowongan');
-                
-            //     return $filterApplied 
-            //         ? 'Belum ada data aktivitas magang untuk lowongan yang dipilih.' 
-            //         : 'Gunakan filter lowongan magang di atas untuk melihat aktivitas magang Anda.';
-            // });
-            
+        // ->emptyStateIcon(function () {
+        //     $request = request();
+        //     $filterApplied = $request->filled('tableFilters.filter_lowongan_magang.id_lowongan');
+
+        //     return $filterApplied 
+        //         ? 'heroicon-o-document' 
+        //         : 'heroicon-o-funnel';
+        // })
+        // ->emptyStateHeading(function () {
+        //     $request = request();
+        //     $filterApplied = $request->filled('tableFilters.filter_lowongan_magang.id_lowongan');
+
+        //     return $filterApplied 
+        //         ? 'Belum ada aktivitas magang' 
+        //         : 'Pilih Filter Lowongan Magang';
+        // })
+        // ->emptyStateDescription(function () {
+        //     $request = request();
+        //     $filterApplied = $request->filled('tableFilters.filter_lowongan_magang.id_lowongan');
+
+        //     return $filterApplied 
+        //         ? 'Belum ada data aktivitas magang untuk lowongan yang dipilih.' 
+        //         : 'Gunakan filter lowongan magang di atas untuk melihat aktivitas magang Anda.';
+        // });
+
 
 
 
@@ -976,11 +1021,11 @@ class AktivitasMagangHarianResource extends Resource
                                     Components\TextEntry::make('tanggal_log')
                                         ->label('Tanggal')
                                         ->date('d F Y'),
-                                    
+
                                     Components\TextEntry::make('status')
                                         ->badge()
-                                        ->formatStateUsing(fn (string $state): string => ucfirst($state))
-                                        ->color(fn (string $state): string => match ($state) {
+                                        ->formatStateUsing(fn(string $state): string => ucfirst($state))
+                                        ->color(fn(string $state): string => match ($state) {
                                             'masuk' => 'success',
                                             'izin' => 'warning',
                                             'sakit' => 'danger',
@@ -988,18 +1033,18 @@ class AktivitasMagangHarianResource extends Resource
                                             default => 'gray',
                                         }),
                                 ]),
-                                
+
                                 Components\Group::make([
                                     Components\TextEntry::make('penempatan.pengajuan.lowongan.judul_lowongan')
                                         ->label('Lowongan')
                                         ->placeholder('Tidak ada informasi lowongan'),
-                                        
+
                                     Components\TextEntry::make('penempatan.pengajuan.lowongan.perusahaan.nama')
                                         ->label('Perusahaan')
                                         ->placeholder('Tidak ada informasi perusahaan'),
                                 ]),
                             ]),
-                            
+
                         Components\Section::make('Keterangan')
                             ->schema([
                                 Components\TextEntry::make('keterangan')
@@ -1008,7 +1053,7 @@ class AktivitasMagangHarianResource extends Resource
                                     ->columnSpanFull(),
                             ])
                             ->collapsible(),
-                        
+
                         Components\Section::make('Feedback Pembimbing')
                             ->schema([
                                 Components\TextEntry::make('feedback_progres')
@@ -1019,7 +1064,7 @@ class AktivitasMagangHarianResource extends Resource
                                     ->columnSpanFull(),
                             ])
                             ->collapsible(),
-                            
+
                         Components\Section::make('Bukti Aktivitas')
                             ->schema([
                                 Components\ImageEntry::make('file_bukti')
@@ -1043,11 +1088,11 @@ class AktivitasMagangHarianResource extends Resource
             'create' => Pages\CreateAktivitasMagangHarian::route('/create'),
         ];
     }
-    
+
     public static function getEloquentQuery(): Builder
     {
         $userId = Auth::id();
-        
+
         return parent::getEloquentQuery()
             ->whereHas('penempatan', function (Builder $query) use ($userId) {
                 $query->whereHas('mahasiswa', function (Builder $query) use ($userId) {
