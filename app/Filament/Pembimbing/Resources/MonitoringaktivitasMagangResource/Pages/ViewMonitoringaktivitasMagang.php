@@ -125,7 +125,7 @@ class ViewMonitoringaktivitasMagang extends ViewRecord
                         ImageEntry::make('file_bukti')
                             ->getStateUsing(function ($record) {
                                 return $record->file_bukti
-                                    ? 'https://res.cloudinary.com/dxwwjhtup/image/upload/' . ltrim($record->file_bukti, '/')
+                                    ? \Storage::disk('cloudinary')->url($record->file_bukti)
                                     : null;
                             })
                             ->height(400)
