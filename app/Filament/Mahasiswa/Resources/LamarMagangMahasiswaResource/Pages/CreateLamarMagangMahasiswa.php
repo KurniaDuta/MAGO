@@ -145,29 +145,25 @@ class CreateLamarMagangMahasiswa extends CreateRecord
     protected function beforeCreate(): void
     {
         $idMahasiswa = auth()->user()->mahasiswa->id_mahasiswa;
-        $existingLamaran = PengajuanMagangModel::where('id_mahasiswa', $idMahasiswa)
-            ->whereIn('status', ['Diajukan', 'Diterima'])
-            ->with(['lowongan'])
-            ->get();
+        $lowonganData = $this->form->getState();
+        $idLowongan = $lowonganData['id_lowongan'] ?? null;
 
-        foreach ($existingLamaran as $lamaran) {
-            // Jika status masih Diajukan, langsung blok
-            if ($lamaran->status === 'Diajukan') {
-                Notification::make()
-                    ->title('Gagal Mengajukan Lamaran')
-                    ->body('Anda sudah memiliki satu lamaran magang aktif. Anda hanya bisa melamar lagi jika lamaran sebelumnya telah ditolak.')
-                    ->danger()
-                    ->send();
-                $this->halt();
-            }
+        if ($idLowongan) {
+            $targetLowongan = LowonganMagangModel::find($idLowongan);
+            if ($targetLowongan) {
+                $idPeriode = $targetLowongan->id_periode;
 
-            // Jika status Diterima, cek tanggal selesai magang
-            if ($lamaran->status === 'Diterima' && $lamaran->lowongan) {
-                $tanggalSelesai = $lamaran->lowongan->tanggal_selesai_magang ?? null;
-                if ($tanggalSelesai && now()->lessThanOrEqualTo($tanggalSelesai)) {
+                $existingAccepted = PengajuanMagangModel::where('id_mahasiswa', $idMahasiswa)
+                    ->where('status', 'Diterima')
+                    ->whereHas('lowongan', function ($query) use ($idPeriode) {
+                        $query->where('id_periode', $idPeriode);
+                    })
+                    ->exists();
+
+                if ($existingAccepted) {
                     Notification::make()
                         ->title('Gagal Mengajukan Lamaran')
-                        ->body('Anda masih memiliki magang aktif yang belum selesai. Anda hanya bisa melamar lagi jika periode magang sudah berakhir atau lamaran sebelumnya ditolak.')
+                        ->body('Anda sudah memiliki lamaran yang diterima pada periode yang sama. Anda tidak dapat mengajukan lamaran baru untuk periode ini.')
                         ->danger()
                         ->send();
                     $this->halt();
