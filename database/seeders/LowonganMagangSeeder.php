@@ -14,7 +14,7 @@ class LowonganMagangSeeder extends Seeder
         DB::statement('ALTER TABLE t_lowongan_magang AUTO_INCREMENT = 1');
 
         $periodeList = DB::table('m_periode')
-            ->whereIn('nama_periode', ['2024/2025 Ganjil', '2024/2025 Genap'])
+            ->whereIn('nama_periode', ['2024/2025 Ganjil', '2024/2025 Genap', '2025/2026 Ganjil'])
             ->get();
 
         // Ambil data perusahaan lengkap dengan nama
@@ -399,13 +399,15 @@ class LowonganMagangSeeder extends Seeder
             $tahun = intval(substr($p->nama_periode, 0, 4));
             $jenis = strpos($p->nama_periode, 'Ganjil') !== false ? 'Ganjil' : 'Genap';
 
+            $status = strpos($p->nama_periode, '2024/2025') === 0 ? 'Selesai' : 'Aktif';
+
             if ($jenis == 'Ganjil') {
                 $start = Carbon::create($tahun, 7, 1);
             } else {
                 $start = Carbon::create($tahun + 1, 1, 1);
             }
 
-            for ($i = 0; $i < 10; $i++) { // 10 lowongan per periode
+            for ($i = 0; $i < 50; $i++) { // 50 lowongan per periode
                 // Pilih template lowongan secara acak
                 $template = $lowonganTemplates[array_rand($lowonganTemplates)];
                 
@@ -428,7 +430,7 @@ class LowonganMagangSeeder extends Seeder
                     'deskripsi_lowongan' => $template['deskripsi'],
                     'tanggal_posting' => $tanggal_posting->format('Y-m-d'),
                     'batas_akhir_lamaran' => $batas_akhir->format('Y-m-d'),
-                    'status' => 'Aktif',
+                    'status' => $status,
                     'id_periode' => $p->id_periode,
                     'id_waktu_magang' => $id_waktu_magang,
                     'id_insentif' => $insentif[array_rand($insentif)],

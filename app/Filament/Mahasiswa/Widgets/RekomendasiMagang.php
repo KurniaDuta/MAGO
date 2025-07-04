@@ -19,6 +19,11 @@ class RekomendasiMagang extends BaseWidget
     protected static ?string $heading = '🎗️ Rekomendasi Magang';
     protected static ?int $sort = 3;
 
+    public static function canView(): bool
+    {
+        return auth()->user()?->mahasiswa?->preferensi()->exists();
+    }
+    
     protected array $bobot = [
         1 => 0.397,
         2 => 0.297,
@@ -48,79 +53,90 @@ class RekomendasiMagang extends BaseWidget
                     ->orderByRaw("FIELD(id_lowongan, " . implode(',', $orderedIds) . ")");
             })
             ->columns([
-                Tables\Columns\TextColumn::make('iteration')
-                    ->label('#')
-                    ->rowIndex()
-                    ->alignCenter()
-                    ->badge()
-                    ->extraHeaderAttributes(['style' => 'width: 60px; min-width: 60px;'])
-                    ->extraCellAttributes(['style' => 'width: 60px; min-width: 60px;'])
-                    ->color(function ($state) {
-                        return match ((int)$state) {
-                            1 => 'warning',
-                            2 => 'gray',
-                            3 => 'danger',
-                            default => 'primary',
-                        };
-                    })
-                    ->weight('bold')
-                    ->formatStateUsing(function ($state) {
-                        return match ((int)$state) {
-                            1 => '🥇 1',
-                            2 => '🥈 2',
-                            3 => '🥉 3',
-                            default => $state,
-                        };
-                    })
-                    ->weight('bold')
-                    ->size('lg'),
-                Tables\Columns\TextColumn::make('judul_lowongan')
-                    ->searchable()
-                    ->copyable()
-                    ->limit(25)
-                    ->label('Lowongan')
-                    ->weight('bold')
-                    ->tooltip(fn($record) => new HtmlString(
-                        $record->judul_lowongan
-                    )),
-                Tables\Columns\TextColumn::make('perusahaan.nama')
-                    ->searchable()
-                    ->limit(20)
-                    ->tooltip(fn($record) => new HtmlString(
-                        $record->perusahaan->nama
-                    ))
-                    ->label('Perusahaan'),
-                Tables\Columns\TextColumn::make('jenisMagang.nama_jenis_magang')
-                    ->searchable()
-                    ->limit(15)
-                    ->tooltip(fn($record) => new HtmlString(
-                        $record->jenisMagang->nama_jenis_magang
-                    ))
-                    ->label('Jenis Magang'),
-                Tables\Columns\TextColumn::make('daerahMagang.namaLengkapDenganProvinsi')
-                    ->limit(15)
-                    ->label('Lokasi Magang')
-                    ->tooltip(fn($record) => new HtmlString(
-                        $record->daerahMagang->namaLengkapDenganProvinsi
-                    )),
+                Tables\Columns\Layout\Stack::make([
+                    Tables\Columns\TextColumn::make('judul_lowongan')
+                        ->searchable()
+                        ->copyable()
+                        ->label('Judul Lowongan')
+                        ->weight('bold')
+                        ->size('lg')
+                        ->formatStateUsing(function ($state, $record) use ($rekomendasiCollection) {
+                            $position = $rekomendasiCollection->search(function ($item) use ($record) {
+                                return $item->id_lowongan === $record->id_lowongan;
+                            });
+
+                            $position = $position !== false ? $position + 1 : null;
+
+                            $medal = match ((int)$position) {
+                                1 => '<span class="text-amber-500 text-xl mr-1">🥇</span>',
+                                2 => '<span class="text-gray-500 text-xl mr-1">🥈</span>',
+                                3 => '<span class="text-orange-600 text-xl mr-1">🥉</span>',
+                                default => '',
+                            };
+
+                            return new HtmlString($medal . $state);
+                        })
+                        ->tooltip(fn($record) => new HtmlString($record->judul_lowongan)),
+
+                    Tables\Columns\TextColumn::make('perusahaan.nama')
+                        ->label('Perusahaan')
+                        ->icon('heroicon-o-building-office')
+                        ->searchable()
+                        ->weight('medium'),
+
+                    Tables\Columns\TextColumn::make('daerahMagang.namaLengkapDenganProvinsi')
+                        ->label('Lokasi')
+                        ->icon('heroicon-o-map-pin')
+                        ->weight('medium'),
+
+                    Tables\Columns\TextColumn::make('jenisMagang.nama_jenis_magang')
+                        ->label('Jenis Magang')
+                        ->icon('heroicon-o-academic-cap')
+                        ->searchable()
+                        ->badge()
+                        ->color('success'),
+
+                    Tables\Columns\Layout\Grid::make([
+                        'default' => 1,
+                        'sm' => 4,
+                    ])
+                        ->schema([
+                            Tables\Columns\TextColumn::make('waktuMagang.waktu_magang')
+                                ->label('Waktu Magang')
+                                ->icon('heroicon-o-clock')
+                                ->searchable()
+                                ->badge()
+                                ->color('info'),
+
+                            Tables\Columns\TextColumn::make('insentif.keterangan')
+                                ->label('Insentif')
+                                ->icon('heroicon-o-banknotes')
+                                ->searchable()
+                                ->badge()
+                                ->color('warning'),
+                        ]),
+                ])
+                    ->extraAttributes(['class' => 'space-y-2'])
+                    ->grow(),
+
                 Tables\Columns\TextColumn::make('daerahMagang.nama_daerah')
                     ->label('Nama Daerah')
                     ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true), // Sembunyikan secara default
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->extraAttributes(['class' => 'hidden'])
+                    ->extraHeaderAttributes(['class' => 'hidden']),
+
                 Tables\Columns\TextColumn::make('daerahMagang.jenis_daerah')
                     ->label('Jenis Daerah')
                     ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('waktuMagang.waktu_magang')
-                    ->searchable()
-                    ->label('Waktu'),
-                Tables\Columns\TextColumn::make('insentif.keterangan')
-                    ->searchable()
-                    ->label('Insentif'),
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->extraAttributes(['class' => 'hidden'])
+                    ->extraHeaderAttributes(['class' => 'hidden']),
             ])
+            ->paginationPageOptions([9, 18, 27, 'all'])
             ->striped()
             ->emptyStateHeading('Belum ada lowongan yang tersedia')
-            ->emptyStateDescription('Silakan lengkapi preferensi magang Anda untuk mendapatkan rekomendasi lowongan yang sesuai.')
+            ->emptyStateIcon('heroicon-o-exclamation-circle')
             ->filters([
                 Tables\Filters\SelectFilter::make('id_jenis_magang')
                     ->label('Jenis Magang')
@@ -131,27 +147,34 @@ class RekomendasiMagang extends BaseWidget
             ])
             ->actions([
                 Tables\Actions\Action::make('lihat_detail')
-                    ->label('Lihat Detail')
+                    ->label('Detail')
                     ->icon('heroicon-o-eye')
                     ->url(
                         fn(LowonganMagangModel $record) =>
                         '/mahasiswa/lowongan-magang/' . $record->id_lowongan
                     )
                     ->openUrlInNewTab(false)
-                    ->color('primary'),
+                    ->color('primary')
+                    ->button(),
                 Tables\Actions\Action::make('lihat_perhitungan')
                     ->label('Lihat Perhitungan')
                     ->icon('heroicon-o-calculator')
-                    ->color('success')
+                    ->color('gray')
                     ->modalWidth('7xl')
                     ->modalHeading('Detail Perhitungan Rekomendasi')
                     ->modalDescription('Berikut adalah detail perhitungan rekomendasi menggunakan metode SWARA DAN ARAS')
-                    ->action(function (LowonganMagangModel $record) {
-                        
-                    })
+                    ->action(function (LowonganMagangModel $record) {})
                     ->modalContent(function (LowonganMagangModel $record) {
                         return new HtmlString($this->generatePerhitunganHtml($record->id_lowongan));
                     })
+                    ->button()
+            ])
+            ->contentGrid([
+                'default' => 1,
+                'sm' => 1,
+                'md' => 2,
+                'lg' => 3,
+                'xl' => 3,
             ]);
     }
 

@@ -30,6 +30,24 @@ class CreatePengajuanMagangMandiri extends CreateRecord
         // Get all form data
         $formData = $this->form->getState();
 
+        $hasAcceptedInternship = PengajuanMagangModel::where('id_mahasiswa', Auth::user()->mahasiswa->id_mahasiswa)
+            ->where('status', 'Diterima')
+            ->whereHas('lowongan', function ($query) use ($formData) {
+                $query->where('id_periode', $formData['id_periode']);
+            })
+            ->exists();
+
+        if ($hasAcceptedInternship) {
+            Notification::make()
+                ->danger()
+                ->title('Pengajuan tidak dapat dilakukan')
+                ->body('Anda sudah memiliki pengajuan magang yang diterima pada periode yang sama.')
+                ->persistent()
+                ->send();
+
+            $this->halt();
+        }
+
         return DB::transaction(function () use ($formData, $data) {
 
             $idPerusahaan = null;

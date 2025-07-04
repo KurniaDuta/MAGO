@@ -38,6 +38,16 @@ class AktivitasMagangHarianResource extends Resource
     protected static ?string $navigationGroup = 'Aktivitas & Evaluasi';
     protected static ?int $navigationSort = 4;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()?->mahasiswa?->preferensi()->exists() ?? false;
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->mahasiswa?->preferensi()->exists() ?? false;
+    }
+    
     public static function form(Form $form): Form
     {
         $lowonganOptions = [];

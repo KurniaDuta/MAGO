@@ -14,18 +14,33 @@ class PengajuanMagangSeeder extends Seeder
         DB::statement('ALTER TABLE t_pengajuan_magang AUTO_INCREMENT = 1');
 
         $mahasiswa = DB::table('m_mahasiswa')->get();
-        $lowongan = DB::table('t_lowongan_magang')
-            ->whereIn('id_periode', function($q) {
-                $q->select('id_periode')->from('m_periode')
-                ->whereIn('nama_periode', [
-                    '2024/2025 Ganjil',
-                    '2024/2025 Genap'
-                ]);
-            })->get();
-
-        if ($lowongan->isEmpty()) {
-            throw new \Exception("TIDAK ADA LOWONGAN pada periode 2024/2025 Ganjil/Genap. Cek LowonganMagangSeeder!");
+        
+        // Get periods with their IDs
+        $periodeData = DB::table('m_periode')
+            ->whereIn('nama_periode', [
+                '2024/2025 Ganjil',
+                '2024/2025 Genap',
+                '2025/2026 Ganjil'
+            ])
+            ->select('id_periode', 'nama_periode')
+            ->get()
+            ->keyBy('nama_periode');
+            
+        // Get lowongan for each periode
+        $lowonganByPeriode = [];
+        foreach ($periodeData as $nama => $periode) {
+            $lowonganByPeriode[$nama] = DB::table('t_lowongan_magang')
+                ->where('id_periode', $periode->id_periode)
+                ->get();
         }
+
+        // Check if lowongan exists for each periode
+        foreach ($lowonganByPeriode as $periode => $lowongan) {
+            if ($lowongan->isEmpty()) {
+                throw new \Exception("TIDAK ADA LOWONGAN pada periode $periode. Cek LowonganMagangSeeder!");
+            }
+        }
+        
         if ($mahasiswa->isEmpty()) {
             throw new \Exception("TIDAK ADA MAHASISWA!");
         }
@@ -46,35 +61,81 @@ class PengajuanMagangSeeder extends Seeder
         $counter = 1;
         $data = [];
         $existing = [];
-        // Window bulan: Jul 2024 - Jun 2025
-        $start = Carbon::create(2024, 7, 1);
-        $end = Carbon::create(2025, 6, 30);
 
-        // Generate pengajuan untuk setiap bulan window
-        for ($date = $start->copy(); $date <= $end; $date->addMonth()) {
-            // 4 pengajuan per bulan
-            for ($i=0; $i<4; $i++) {
+        // Periode 1: 2024/2025 Ganjil (April-Juni 2024) - Status: Diterima/Ditolak
+        $this->generatePengajuan(
+            $data, 
+            $existing, 
+            $counter, 
+            Carbon::create(2024, 4, 1), 
+            Carbon::create(2024, 6, 30), 
+            $mahasiswa, 
+            $lowonganByPeriode['2024/2025 Ganjil'], 
+            ['Diterima', 'Ditolak'],
+            $alasan_penolakan_profesional
+        );
+
+        // Periode 2: 2024/2025 Genap (Oktober-Desember 2024) - Status: Diterima/Ditolak
+        $this->generatePengajuan(
+            $data, 
+            $existing, 
+            $counter, 
+            Carbon::create(2024, 10, 1), 
+            Carbon::create(2024, 12, 30), 
+            $mahasiswa, 
+            $lowonganByPeriode['2024/2025 Genap'], 
+            ['Diterima', 'Ditolak'],
+            $alasan_penolakan_profesional
+        );
+
+        // Periode 3: 2025/2026 Ganjil (April-Juni 2025) - Status: Diajukan
+        $this->generatePengajuan(
+            $data, 
+            $existing, 
+            $counter, 
+            Carbon::create(2025, 4, 1), 
+            Carbon::create(2025, 6, 15), 
+            $mahasiswa, 
+            $lowonganByPeriode['2025/2026 Ganjil'], 
+            ['Diajukan'],
+            $alasan_penolakan_profesional
+        );
+
+        DB::table('t_pengajuan_magang')->insert($data);
+        $this->command->info('Berhasil menyeeder ' . count($data) . ' data pengajuan magang');
+    }
+
+    private function generatePengajuan(&$data, &$existing, &$counter, $startDate, $endDate, $mahasiswa, $lowongan, $allowedStatus, $alasanPenolakan)
+    {
+        // Generate 4 pengajuan per bulan for the given period
+        for ($date = $startDate->copy(); $date <= $endDate; $date->addMonth()) {
+            for ($i = 0; $i < 4; $i++) {
                 $m = $mahasiswa->random();
                 $l = $lowongan->random();
                 $key = $m->id_mahasiswa.'-'.$l->id_lowongan;
                 if (isset($existing[$key])) continue;
                 $existing[$key] = true;
 
-                $tanggal_pengajuan = $date->copy()->addDays(rand(0, 27));
-                $statusRand = rand(1, 100);
-                if ($statusRand <= 60) $status = 'Diajukan';
-                elseif ($statusRand <= 90) $status = 'Diterima';
-                else $status = 'Ditolak';
+                $tanggal_pengajuan = $date->copy()->addDays(rand(0, min(27, $endDate->copy()->endOfMonth()->day - $date->day)));
+                
+                // Make sure pengajuan date doesn't exceed period end date
+                if ($tanggal_pengajuan > $endDate) {
+                    $tanggal_pengajuan = $endDate->copy();
+                }
+                
+                // Select status from allowed statuses for this period
+                $status = $allowedStatus[array_rand($allowedStatus)];
 
                 $tanggal_diterima = null;
                 $alasan_penolakan = null;
+                
                 if ($status == 'Diterima') {
                     $tanggal_diterima = $tanggal_pengajuan->copy()->addDays(rand(1, 10));
-                    if ($tanggal_diterima->month > $tanggal_pengajuan->month) {
-                        $tanggal_diterima = $tanggal_pengajuan->copy()->endOfMonth();
+                    if ($tanggal_diterima > $endDate) {
+                        $tanggal_diterima = $endDate->copy();
                     }
                 } elseif ($status == 'Ditolak') {
-                    $alasan_penolakan = $alasan_penolakan_profesional[array_rand($alasan_penolakan_profesional)];
+                    $alasan_penolakan = $alasanPenolakan[array_rand($alasanPenolakan)];
                 }
 
                 $data[] = [
@@ -91,26 +152,34 @@ class PengajuanMagangSeeder extends Seeder
             }
         }
 
-        // Tambahkan data random lain jika ingin jumlah lebih banyak (opsional)
-        while (count($data) < 150) {
+        // Add more random entries to ensure we have enough data
+        $targetCount = 50; // Aim for 50 entries per period
+        $currentCount = count($data);
+        $additionalNeeded = max(0, $targetCount - $currentCount);
+        
+        for ($i = 0; $i < $additionalNeeded; $i++) {
             $m = $mahasiswa->random();
             $l = $lowongan->random();
             $key = $m->id_mahasiswa.'-'.$l->id_lowongan;
             if (isset($existing[$key])) continue;
             $existing[$key] = true;
-            $tanggal_pengajuan = $start->copy()->addDays(rand(0, $end->diffInDays($start)));
-            $statusRand = rand(1, 100);
-            if ($statusRand <= 60) $status = 'Diajukan';
-            elseif ($statusRand <= 90) $status = 'Diterima';
-            else $status = 'Ditolak';
-
+            
+            $tanggal_pengajuan = $startDate->copy()->addDays(rand(0, $endDate->diffInDays($startDate)));
+            
+            $status = $allowedStatus[array_rand($allowedStatus)];
+            
             $tanggal_diterima = null;
             $alasan_penolakan = null;
+            
             if ($status == 'Diterima') {
                 $tanggal_diterima = $tanggal_pengajuan->copy()->addDays(rand(1, 10));
+                if ($tanggal_diterima > $endDate) {
+                    $tanggal_diterima = $endDate->copy();
+                }
             } elseif ($status == 'Ditolak') {
-                $alasan_penolakan = $alasan_penolakan_profesional[array_rand($alasan_penolakan_profesional)];
+                $alasan_penolakan = $alasanPenolakan[array_rand($alasanPenolakan)];
             }
+            
             $data[] = [
                 'id_pengajuan' => $counter++,
                 'id_mahasiswa' => $m->id_mahasiswa,
@@ -123,8 +192,5 @@ class PengajuanMagangSeeder extends Seeder
                 'updated_at' => $tanggal_diterima ? $tanggal_diterima->format('Y-m-d H:i:s') : $tanggal_pengajuan->format('Y-m-d H:i:s'),
             ];
         }
-
-        DB::table('t_pengajuan_magang')->insert($data);
-        $this->command->info('Berhasil menyeeder ' . count($data) . ' data pengajuan magang');
     }
 }

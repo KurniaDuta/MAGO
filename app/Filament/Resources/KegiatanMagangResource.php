@@ -6,15 +6,10 @@ use App\Filament\Resources\KegiatanMagangResource\Pages;
 use App\Filament\Resources\KegiatanMagangResource\RelationManagers;
 use App\Models\KegiatanMagang;
 use App\Models\Reference\PengajuanMagangModel;
-use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Forms\FormsComponent;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Infolists;
-use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 
@@ -30,318 +25,6 @@ class KegiatanMagangResource extends Resource
     protected static ?string $navigationGroup = 'Administrasi Magang';
     protected static ?int $navigationSort = 1;
 
-    public static function infolist(Infolist $infolist): Infolist
-    {
-        return $infolist
-            ->schema([
-                Infolists\Components\Section::make('Informasi Mahasiswa')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('mahasiswa.user.nama')
-                            ->label('Nama Mahasiswa'),
-
-                        Infolists\Components\TextEntry::make('mahasiswa.nim')
-                            ->label('NIM'),
-
-                        Infolists\Components\TextEntry::make('mahasiswa.prodi.nama_prodi')
-                            ->label('Program Studi'),
-
-                        Infolists\Components\TextEntry::make('mahasiswa.ipk')
-                            ->label('IPK Mahasiswa'),
-
-                        Infolists\Components\TextEntry::make('mahasiswa.semester')
-                            ->label('Semester Mahasiswa'),
-
-                        Infolists\Components\TextEntry::make('tanggal_pengajuan')
-                            ->label('Tanggal Pengajuan')
-                            ->date('Y-m-d'),
-
-                        Infolists\Components\TextEntry::make('status')
-                            ->badge()
-                            ->label('Status Pengajuan')
-                            ->color(fn(string $state): string => match ($state) {
-                                'Diajukan' => 'warning',
-                                'Diterima' => 'success',
-                                'Ditolak' => 'danger',
-                                default => 'gray',
-                            }),
-
-                        Infolists\Components\Section::make('Preferensi Mahasiswa')
-                            ->schema([
-                                Infolists\Components\TextEntry::make('mahasiswa.preferensi.daerahMagang.namaLengkapDenganProvinsi')
-                                    ->label('Daerah Magang')
-                                    ->default('Semua')
-                                    ->placeholder('Semua'),
-
-                                Infolists\Components\TextEntry::make('jenisMagang')
-                                    ->label('Jenis Magang')
-                                    ->default('Semua')
-                                    ->placeholder('Semua')
-                                    ->getStateUsing(function ($record) {
-                                        try {
-                                            if (!$record->mahasiswa->preferensi) {
-                                                return 'Semua';
-                                            }
-
-                                            $preferensi = $record->mahasiswa->preferensi;
-
-                                            $jenisMagangs = DB::table('m_jenis_magang')
-                                                ->join('r_preferensi_jenis_magang', 'm_jenis_magang.id_jenis_magang', '=', 'r_preferensi_jenis_magang.id_jenis_magang')
-                                                ->where('r_preferensi_jenis_magang.id_preferensi', $preferensi->id_preferensi)
-                                                ->pluck('m_jenis_magang.nama_jenis_magang')
-                                                ->toArray();
-
-                                            if (empty($jenisMagangs)) {
-                                                return 'Semua';
-                                            }
-
-                                            return implode(', ', $jenisMagangs);
-                                        } catch (\Exception $e) {
-                                            return 'Semua: ' . $e->getMessage();
-                                        }
-                                    }),
-
-                                Infolists\Components\TextEntry::make('bidangMahasiswa')
-                                    ->label('Bidang Keahlian')
-                                    ->default('Semua')
-                                    ->placeholder('Semua')
-                                    ->getStateUsing(function ($record) {
-                                        try {
-                                            if (!$record->mahasiswa->preferensi) {
-                                                return 'Semua';
-                                            }
-
-                                            $preferensi = $record->mahasiswa->preferensi;
-                                            $bidangKeahlians = DB::table('m_bidang_keahlian')
-                                                ->join('r_preferensi_bidang', 'm_bidang_keahlian.id_bidang', '=', 'r_preferensi_bidang.id_bidang')
-                                                ->where('r_preferensi_bidang.id_preferensi', $preferensi->id_preferensi)
-                                                ->pluck('m_bidang_keahlian.nama_bidang_keahlian')
-                                                ->toArray();
-
-                                            if (empty($bidangKeahlians)) {
-                                                return 'Semua';
-                                            }
-
-                                            return implode(', ', $bidangKeahlians);
-                                        } catch (\Exception $e) {
-                                            return 'Semua: ' . $e->getMessage();
-                                        }
-                                    }),
-
-                                Infolists\Components\TextEntry::make('mahasiswa.preferensi.insentif.keterangan')
-                                    ->label('Insentif')
-                                    ->default('Semua')
-                                    ->placeholder('Semua'),
-
-                                Infolists\Components\TextEntry::make('mahasiswa.preferensi.waktuMagang.waktu_magang')
-                                    ->label('Waktu Magang')
-                                    ->default('Semua')
-                                    ->placeholder('Semua'),
-
-                            ])->columns(2)
-                            ->collapsible(),
-
-                        Infolists\Components\Section::make('Dokumen Mahasiswa')
-                            ->schema([
-                                Infolists\Components\RepeatableEntry::make('mahasiswa.dokumen')
-                                    ->schema([
-                                        Infolists\Components\TextEntry::make('jenis_dokumen')
-                                            ->label('Jenis Dokumen'),
-
-                                        Infolists\Components\TextEntry::make('path_dokumen')
-                                            ->label('Lihat Dokumen')
-                                            ->color('primary')
-                                            ->formatStateUsing(function ($state, $record) {
-                                                $extension = pathinfo($state, PATHINFO_EXTENSION);
-                                                return $record->nama_dokumen . '.' . $extension;
-                                            })
-                                            ->url(fn($record) => asset('storage/' . $record->path_dokumen), true)
-                                            ->openUrlInNewTab(),
-                                    ])
-                                    ->columns(2),
-
-                                Infolists\Components\TextEntry::make('dokumenEmpty')
-                                    ->label('')
-                                    ->default('Mahasiswa belum mengunggah dokumen apapun')
-                                    ->visible(function ($record) {
-                                        return !$record->mahasiswa->dokumen || $record->mahasiswa->dokumen->isEmpty();
-                                    }),
-                            ])
-                            // ->columns(2)
-                            ->collapsible(),
-                    ])->columns(3),
-
-                Infolists\Components\Section::make('Informasi Perusahaan')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('lowongan.perusahaan.nama')
-                            ->label('Perusahaan'),
-
-                        Infolists\Components\TextEntry::make('lowongan.perusahaan.no_telepon')
-                            ->label('Nomor Telepon Perusahaan')
-                            ->icon('heroicon-m-phone'),
-
-                        Infolists\Components\TextEntry::make('lowongan.perusahaan.website')
-                            ->label('Website Perusahaan')
-                            ->icon('heroicon-m-globe-alt'),
-
-                        Infolists\Components\TextEntry::make('lowongan.perusahaan.partnership')
-                            ->label('Status Perusahaan')
-                            ->badge()
-                            ->color(fn(string $state): string => match ($state) {
-                                'Perusahaan Mitra' => 'success',
-                                'Perusahaan Non-Mitra' => 'danger',
-                                default => 'gray',
-                            }),
-
-                        Infolists\Components\TextEntry::make('lowongan.perusahaan.alamat')
-                            ->label('Alamat Perusahaan')
-                            ->columnSpanFull(),
-                    ])->columns(2),
-
-                Infolists\Components\Section::make('Detail Magang')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('lowongan.judul_lowongan')
-                            ->label('Judul Lowongan'),
-
-                        Infolists\Components\TextEntry::make('lowongan.jenisMagang.nama_jenis_magang')
-                            ->label('Jenis Magang'),
-
-                        Infolists\Components\TextEntry::make('lowongan.daerahMagang.provinsi.nama_provinsi')
-                            ->label('Provinsi'),
-
-                        Infolists\Components\TextEntry::make('lowongan.daerahMagang.namaLengkap')
-                            ->label('Daerah (Kota/Kabupaten)'),
-
-                        Infolists\Components\TextEntry::make('lowongan.periode.nama_periode')
-                            ->label('Periode'),
-
-                        Infolists\Components\TextEntry::make('lowongan.waktuMagang.waktu_magang')
-                            ->label('Waktu Magang'),
-
-                        Infolists\Components\TextEntry::make('lowongan.insentif.keterangan')
-                            ->label('Insentif'),
-
-
-                        Infolists\Components\TextEntry::make('lowongan.status')
-                            ->badge()
-                            ->color(fn(string $state): string => match ($state) {
-                                'Aktif' => 'success',
-                                'Selesai' => 'danger',
-                                default => 'gray',
-                            }),
-                        Infolists\Components\TextEntry::make('lowongan.tanggal_posting')
-                            ->label('Tanggal Posting')
-                            ->date(),
-
-                        Infolists\Components\TextEntry::make('lowongan.batas_akhir_lamaran')
-                            ->label('Batas Akhir Lamaran')
-                            ->date(),
-
-                        Infolists\Components\TextEntry::make('lowongan.deskripsi_lowongan')
-                            ->label('Deskripsi Lowongan')
-                            ->html()
-                            ->columnSpanFull(),
-                    ])->columns(3),
-
-                Infolists\Components\Section::make('Dosen Pembimbing')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('penempatan.dosenPembimbing.user.nama')
-                            ->label('Nama Dosen Pembimbing'),
-                        
-                        Infolists\Components\TextEntry::make('penempatan.dosenPembimbing.nip')
-                            ->label('NIP Dosen Pembimbing'),
-
-                        Infolists\Components\TextEntry::make('penempatan.dosenPembimbing.user.no_telepon')
-                            ->label('Nomor Telepon Dosen Pembimbing')
-                            ->icon('heroicon-m-phone'),
-
-                        Infolists\Components\TextEntry::make('penempatan.dosenPembimbing.bidangKeahlian.nama_bidang_keahlian')
-                            ->label('Bidang Keahlian Dosen Pembimbing'),
-                    ])
-                    ->columns(2)
-                    ->visible(fn($record) => $record->status === 'Diterima'),
-
-                Infolists\Components\Section::make('Catatan Penolakan')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('alasan_penolakan')
-                            ->label('Alasan Penolakan')
-                            ->state(function ($record) {
-                                if (empty($record->alasan_penolakan)) {
-                                    return 'Tidak memenuhi syarat atau alasan lainnya.';
-                                }
-
-                                return strip_tags($record->alasan_penolakan);
-                            }),
-                    ])->columns(1)
-                    ->visible(fn($record) => $record->status === 'Ditolak'),
-            ]);
-    }
-    public static function form(Form $form): Form
-    {
-        return $form
-            ->schema([
-                Forms\Components\Section::make('Status Pengajuan')
-                    ->schema([
-                        Forms\Components\Select::make('status')
-                            ->label('Status Pengajuan')
-                            ->default('Diajukan')
-                            ->options([
-                                'Diajukan' => 'Diajukan',
-                                'Diterima' => 'Diterima',
-                                'Ditolak' => 'Ditolak',
-                            ])
-                            ->live()
-                            ->afterStateUpdated(function (string $state, callable $set) {
-                                if ($state === 'Diterima') {
-                                    $set('tanggal_diterima', now()->format('Y-m-d'));
-                                }
-                            })
-                            ->required(),
-
-                        Forms\Components\DatePicker::make('tanggal_diterima')
-                            ->label('Tanggal Diterima')
-                            ->default(now()->format('Y-m-d'))
-                            ->displayFormat('Y-m-d')
-                            ->visible(fn(Forms\Get $get) => $get('status') === 'Diterima')
-                            ->disabled() // Make it read-only
-                            ->dehydrated(fn(Forms\Get $get) => $get('status') === 'Diterima'),
-                    ])->columns(2),
-
-                Forms\Components\Section::make('Dosen Pembimbing')
-                    ->schema([
-                        Forms\Components\Select::make('dosen_pembimbing')
-                            ->label('Dosen Pembimbing')
-                            ->options(function () {
-                                $dosenOptions = [];
-                                $dosenList = \App\Models\Auth\DosenPembimbingModel::query()
-                                    ->with('bidangKeahlian', 'user')
-                                    ->get();
-
-                                foreach ($dosenList as $dosen) {
-                                    $bidangKeahlian = $dosen->bidangKeahlian->pluck('nama_bidang_keahlian')->toArray();
-                                    $bidangText = !empty($bidangKeahlian)
-                                        ? implode(', ', $bidangKeahlian)
-                                        : 'Tidak Ada';
-
-                                    $dosenOptions[$dosen->id_dospem] = $dosen->user->nama . ' (' . $bidangText . ')';
-                                }
-
-                                return $dosenOptions;
-                            })
-                            ->searchable()
-                            ->required(fn(Forms\Get $get) => $get('status') === 'Diterima')
-                            ->visible(fn(Forms\Get $get) => $get('status') === 'Diterima'),
-                    ])
-                    ->visible(fn(Forms\Get $get) => $get('status') === 'Diterima'),
-
-                Forms\Components\Section::make('Catatan Penolakan')
-                    ->schema([
-                        Forms\Components\RichEditor::make('alasan_penolakan')
-                            ->required(fn(Forms\Get $get) => $get('status') === 'Ditolak')
-                            ->visible(fn(Forms\Get $get) => $get('status') === 'Ditolak'),
-                    ])
-                    ->visible(fn(Forms\Get $get) => $get('status') === 'Ditolak'),
-            ]);
-    }
 
     public static function table(Table $table): Table
     {
@@ -410,18 +93,18 @@ class KegiatanMagangResource extends Resource
                     ->relationship('lowongan.perusahaan', 'nama')
                     ->searchable()
                     ->preload(),
+
+                Tables\Filters\SelectFilter::make('periode')
+                    ->label('Periode')
+                    ->relationship('lowongan.periode', 'nama_periode')
+                    ->searchable()
+                    ->preload(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
-                    ->modalHeading('Hapus Pengajuan Magang')
-                    ->modalDescription('Apakah Anda yakin ingin menghapus pengajuan magang ini?')
-                    ->modalSubmitActionLabel('Ya, Hapus')
-                    ->modalCancelActionLabel('Batal')
-                    ->hidden(function (PengajuanMagangModel $record) {
-                        return $record->status === 'Diterima';
-                    }),
+                Tables\Actions\ViewAction::make()
+                    ->label('Lihat Pengajuan')
+                    ->icon('heroicon-o-eye')
+                    ->tooltip('Lihat detail pengajuan magang'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -473,9 +156,7 @@ class KegiatanMagangResource extends Resource
     {
         return [
             'index' => Pages\ListKegiatanMagangs::route('/'),
-            'create' => Pages\CreateKegiatanMagang::route('/create'),
             'view' => Pages\ViewKegiatanMagang::route('/{record}'),
-            'edit' => Pages\EditKegiatanMagang::route('/{record}/edit'),
         ];
     }
 

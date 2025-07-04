@@ -256,6 +256,12 @@ class LowonganResource extends Resource
                 Tables\Filters\SelectFilter::make('id_jenis_magang')
                     ->label('Jenis Magang')
                     ->relationship('jenisMagang', 'nama_jenis_magang'),
+
+                Tables\Filters\SelectFilter::make('id_periode')
+                    ->label('Periode')
+                    ->relationship('periode', 'nama_periode')
+                    ->searchable()
+                    ->preload()
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
