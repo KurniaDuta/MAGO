@@ -82,11 +82,11 @@ class ViewMonitoringaktivitasMagang extends ViewRecord
 
                         TextEntry::make('penempatan.mahasiswa.prodi.nama_prodi')
                             ->label('Program Studi')
-                            ->visible(fn($record) => $record->penempatan->mahasiswa->prodi ?? false),
+                            ->visible(fn($record) => (bool) ($record->penempatan->mahasiswa->prodi ?? false)),
 
                         TextEntry::make('penempatan.mahasiswa.semester')
                             ->label('Semester')
-                            ->visible(fn($record) => $record->penempatan->mahasiswa->semester ?? false),
+                            ->visible(fn($record) => (bool) ($record->penempatan->mahasiswa->semester ?? false)),
 
                         TextEntry::make('tanggal_log')
                             ->label('Tanggal Aktivitas')
